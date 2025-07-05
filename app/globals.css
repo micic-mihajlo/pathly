@@ -1,0 +1,94 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root,
+  .light {
+    /* Improved Pastel Green Color Palette with Better Readability */
+    --background: 140 76% 96%; /* Warmer mint background #F1FCF5 */
+    --foreground: 0 0% 10%; /* Sharp primary text #1A1A1A */
+    --card: 140 60% 92%; /* Card background #E3F7EB */
+    --card-foreground: 0 0% 10%; /* Sharp primary text #1A1A1A */
+    --popover: 140 60% 92%; /* Card background #E3F7EB */
+    --popover-foreground: 0 0% 10%; /* Sharp primary text #1A1A1A */
+    --primary: 165 65% 75%; /* Link/accent color #5DD6B2 */
+    --primary-foreground: 0 0% 10%; /* Sharp primary text #1A1A1A */
+    --secondary: 140 60% 92%; /* Card background #E3F7EB */
+    --secondary-foreground: 0 0% 10%; /* Sharp primary text #1A1A1A */
+    --muted: 140 60% 92%; /* Card background #E3F7EB */
+    --muted-foreground: 150 20% 35%; /* Subtitle text #4B615F */
+    --accent: 165 75% 80%; /* CTA button #A0EACD */
+    --accent-foreground: 0 0% 10%; /* Sharp primary text #1A1A1A */
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 0 0% 98%;
+    --border: 140 30% 85%; /* Subtle border */
+    --input: 140 30% 85%; /* Input border */
+    --ring: 165 65% 75%; /* Focus ring #5DD6B2 */
+    --chart-1: 165 65% 75%; /* Link/accent #5DD6B2 */
+    --chart-2: 165 75% 80%; /* CTA button #A0EACD */
+    --chart-3: 140 60% 92%; /* Card background #E3F7EB */
+    --chart-4: 140 76% 96%; /* Background #F1FCF5 */
+    --chart-5: 140 30% 85%; /* Border color */
+    --radius: 0.5rem;
+  }
+  .dark {
+    /* Keep the same improved colors for dark mode override */
+    --background: 140 76% 96%; /* Warmer mint background #F1FCF5 */
+    --foreground: 0 0% 10%; /* Sharp primary text #1A1A1A */
+    --card: 140 60% 92%; /* Card background #E3F7EB */
+    --card-foreground: 0 0% 10%; /* Sharp primary text #1A1A1A */
+    --popover: 140 60% 92%; /* Card background #E3F7EB */
+    --popover-foreground: 0 0% 10%; /* Sharp primary text #1A1A1A */
+    --primary: 165 65% 75%; /* Link/accent color #5DD6B2 */
+    --primary-foreground: 0 0% 10%; /* Sharp primary text #1A1A1A */
+    --secondary: 140 60% 92%; /* Card background #E3F7EB */
+    --secondary-foreground: 0 0% 10%; /* Sharp primary text #1A1A1A */
+    --muted: 140 60% 92%; /* Card background #E3F7EB */
+    --muted-foreground: 150 20% 35%; /* Subtitle text #4B615F */
+    --accent: 165 75% 80%; /* CTA button #A0EACD */
+    --accent-foreground: 0 0% 10%; /* Sharp primary text #1A1A1A */
+    --destructive: 0 62.8% 30.6%;
+    --destructive-foreground: 0 0% 98%;
+    --border: 140 30% 85%; /* Subtle border */
+    --input: 140 30% 85%; /* Input border */
+    --ring: 165 65% 75%; /* Focus ring #5DD6B2 */
+    --chart-1: 165 65% 75%; /* Link/accent #5DD6B2 */
+    --chart-2: 165 75% 80%; /* CTA button #A0EACD */
+    --chart-3: 140 60% 92%; /* Card background #E3F7EB */
+    --chart-4: 140 76% 96%; /* Background #F1FCF5 */
+    --chart-5: 140 30% 85%; /* Border color */
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  html {
+    background-color: #F1FCF5 !important; /* Warmer mint background */
+  }
+  body {
+    @apply bg-background text-foreground;
+    background-color: #F1FCF5 !important; /* Warmer mint background */
+    color: #1A1A1A !important; /* Sharp primary text */
+    font-family: var(--font-geist-sans), ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans", sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji";
+  }
+  code, pre {
+    font-family: var(--font-geist-mono), ui-monospace, SFMono-Regular, "SF Mono", Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  }
+  
+  /* Enhanced button styling with hover effects */
+  .btn-primary {
+    background-color: #A0EACD;
+    color: #1A1A1A;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    transition: all 0.2s ease;
+  }
+  
+  .btn-primary:hover {
+    background-color: #7EDDBB;
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
+    transform: translateY(-1px);
+  }
+}
