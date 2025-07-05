@@ -45,3 +45,5 @@ next-env.d.ts
 /.clerk/
 Data/Crimes/Major_Crime_Indicators_Open_Data_-4060701456759287794.geojson
 Data/TTC Routes and Schedules Data/stop_times.txt
+Data/Crimes/Major_Crime_Indicators_Open_Data_-4060701456759287794.geojson
+Data/TTC Routes and Schedules Data/stop_times.txt
