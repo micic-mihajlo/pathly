@@ -29,7 +29,10 @@ export default function Home() {
           <div className="flex items-center space-x-4">
             <SignedOut>
               <SignInButton mode="modal">
-                <Button variant="ghost" className="hover:bg-primary/10">
+                <Button
+                  variant="ghost"
+                  className="bg-accent hover:bg-accent/65"
+                >
                   Sign In
                 </Button>
               </SignInButton>
@@ -52,7 +55,7 @@ export default function Home() {
           <div className="max-w-4xl mx-auto">
             <div className="flex items-center justify-center mb-6">
               <Navigation className="h-8 w-8 text-primary mr-2" />
-              <span className="text-sm font-medium text-gray-700 bg-primary/10 px-3 py-1 rounded-full">
+              <span className="text-sm font-medium text-gray-700 bg-accent px-3 py-1 rounded-full hover:bg-accent/65 transition-colors">
                 AI-Powered Transit
               </span>
             </div>
@@ -64,8 +67,8 @@ export default function Home() {
 
             <p className="text-xl md:text-2xl text-muted-foreground mb-8 max-w-2xl mx-auto leading-relaxed">
               Safe, weather-aware routes and travel buddies for international
-              students in Ontario.
-              <span className="text-gray-700 font-medium">
+              students in the Greater Toronto Area.
+              <span className="font-bold text-gray">
                 {" "}
                 Never travel alone in the dark again.
               </span>
@@ -109,8 +112,8 @@ export default function Home() {
 
             <div className="mt-12 text-sm text-muted-foreground">
               <p>
-                Trusted by students across Ontario • Free to use •
-                Community-driven
+                Trusted by students across the Greater Toronto Area • Free to
+                use • Community-driven
               </p>
             </div>
           </div>
