@@ -5,11 +5,14 @@ import { useMap } from "@/hooks/use-map";
 import { useSearch } from "@/hooks/use-search";
 import { useRoute } from "@/hooks/use-route";
 import { usePlaces } from "@/hooks/use-places";
+import { useCrimeHexGrid } from "@/hooks/use-crime-hex-grid";
 import { MapView } from "@/components/map/map-view";
 import { SearchBar } from "@/components/map/search-bar";
 import { TransportToggle } from "@/components/map/transport-toggle";
 import { DirectionsPanel } from "@/components/map/directions-panel";
 import { Sidebar } from "@/components/map/sidebar";
+import { HeatmapControl } from "@/components/map/heatmap-control";
+import { HeatmapLegend } from "@/components/map/heatmap-legend";
 import { SearchSuggestion, TransportMode, TransitTimeMode, Place } from "@/utils/types";
 
 export function MapContainer() {
@@ -20,6 +23,7 @@ export function MapContainer() {
   const search = useSearch();
   const route = useRoute(map, userLocation, markersRef);
   const places = usePlaces(map, userLocation);
+  const hexGrid = useCrimeHexGrid(map);
 
   // Handle search suggestion selection with route calculation
   const handleSuggestionSelect = async (suggestion: SearchSuggestion) => {
@@ -153,6 +157,16 @@ export function MapContainer() {
         onQuickSearch={handleQuickSearch}
         onClearPlaces={places.clearPlaceMarkers}
       />
+
+      <HeatmapControl
+        heatmapVisible={hexGrid.hexGridVisible}
+        heatmapLoaded={hexGrid.hexGridLoaded}
+        heatmapError={hexGrid.hexGridError}
+        onToggleHeatmap={hexGrid.toggleHexGrid}
+        onSetIntensity={hexGrid.setHexGridOpacity}
+      />
+
+      <HeatmapLegend visible={hexGrid.hexGridVisible} />
     </div>
   );
 }
