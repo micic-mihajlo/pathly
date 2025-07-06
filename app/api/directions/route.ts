@@ -14,6 +14,14 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    if (!GOOGLE_MAPS_API_KEY) {
+      console.error('Google Maps API key is missing');
+      return NextResponse.json(
+        { error: 'Google Maps API key is not configured' },
+        { status: 500 }
+      );
+    }
+
     // Build Google Maps Directions API URL
     const params = new URLSearchParams({
       origin,
@@ -68,7 +76,27 @@ export async function POST(request: NextRequest) {
       }
     );
 
-    const data = await response.json();
+    // Get response text first to handle non-JSON responses
+    const responseText = await response.text();
+    let data;
+    
+    try {
+      data = JSON.parse(responseText);
+    } catch (parseError) {
+      console.error('Failed to parse Google Maps API response as JSON:', parseError);
+      console.error('Raw response:', responseText);
+      console.error('Response status:', response.status);
+      console.error('Response headers:', response.headers);
+      
+      return NextResponse.json(
+        { 
+          error: 'Google Maps API returned invalid response', 
+          details: responseText.substring(0, 500),
+          status: response.status
+        },
+        { status: 502 }
+      );
+    }
     
     // Log the full response for debugging
     console.log('Google Maps API Response:', {
