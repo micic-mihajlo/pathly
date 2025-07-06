@@ -26,7 +26,9 @@ import {
   ChevronDown,
   DollarSign,
   Calendar,
-  AlertTriangle
+  AlertTriangle,
+  CalendarClock,
+  ChevronUp
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 
@@ -272,6 +274,9 @@ export function MapContainer() {
     routePreference: 'best_route', // best_route, fewer_transfers, less_walking
     transitModes: ['bus', 'subway', 'train', 'tram']
   });
+  const [transitTimeMode, setTransitTimeMode] = useState<'leave_now' | 'leave_at' | 'arrive_by'>('leave_now');
+  const [transitTargetTime, setTransitTargetTime] = useState<Date>(new Date());
+  const [showTimeSelector, setShowTimeSelector] = useState(false);
   const searchTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const markersRef = useRef<mapboxgl.Marker[]>([]);
 
@@ -537,6 +542,16 @@ export function MapContainer() {
       const origin = `${start[1]},${start[0]}`;
       const destination = `${end[1]},${end[0]}`;
       
+      // Prepare time parameters based on transit time mode
+      let timeParams: any = {};
+      if (transitTimeMode === 'leave_now') {
+        timeParams.departureTime = new Date().toISOString();
+      } else if (transitTimeMode === 'leave_at') {
+        timeParams.departureTime = transitTargetTime.toISOString();
+      } else if (transitTimeMode === 'arrive_by') {
+        timeParams.arrivalTime = transitTargetTime.toISOString();
+      }
+
       const response = await fetch('/api/directions', {
         method: 'POST',
         headers: {
@@ -550,7 +565,7 @@ export function MapContainer() {
           transitOptions: {
             modes: transitPreferences.transitModes,
             routingPreference: transitPreferences.routePreference,
-            departureTime: new Date().toISOString(),
+            ...timeParams,
           },
         }),
       });
@@ -584,7 +599,37 @@ export function MapContainer() {
           warnings: route.warnings,
         });
         
-        setRouteSteps(leg.steps);
+        // Convert Google API format to our RouteStep format
+        const convertedSteps = leg.steps.map((step: any) => ({
+          distance: step.distance,
+          duration: step.duration,
+          instructions: step.html_instructions?.replace(/<[^>]*>/g, '') || 'Continue', // Strip HTML tags
+          travelMode: step.travel_mode,
+          transitDetails: step.transit_details ? {
+            arrivalStop: step.transit_details.arrival_stop.name,
+            arrivalTime: step.transit_details.arrival_time.text,
+            departureStop: step.transit_details.departure_stop.name,
+            departureTime: step.transit_details.departure_time.text,
+            headsign: step.transit_details.headsign,
+            line: {
+              name: step.transit_details.line.name,
+              shortName: step.transit_details.line.short_name,
+              color: step.transit_details.line.color,
+              textColor: step.transit_details.line.text_color,
+              vehicle: step.transit_details.line.vehicle ? {
+                type: step.transit_details.line.vehicle.type,
+                name: step.transit_details.line.vehicle.name,
+                icon: step.transit_details.line.vehicle.icon,
+              } : undefined,
+              agencies: step.transit_details.line.agencies,
+            },
+            numStops: step.transit_details.num_stops,
+          } : undefined,
+          polyline: step.polyline,
+          maneuver: step.maneuver,
+        }));
+        
+        setRouteSteps(convertedSteps);
         addGoogleRouteToMap(route, start, end, TransportMode.TRANSIT);
       }
     } catch (error) {
@@ -765,6 +810,21 @@ export function MapContainer() {
       map.current.removeSource('route');
     }
 
+    // also remove any leftover transit layers/segments
+    ['route-walking', 'route-transit'].forEach(id => {
+      if (map.current!.getSource(id)) {
+        map.current!.removeLayer(id);
+        map.current!.removeSource(id);
+      }
+    });
+    for (let i = 0; i < 20; i++) {
+      const segId = `route-segment-${i}`;
+      if (map.current!.getSource(segId)) {
+        map.current!.removeLayer(segId);
+        map.current!.removeSource(segId);
+      }
+    }
+
     // Add route line
     map.current.addSource('route', {
       type: 'geojson',
@@ -811,6 +871,25 @@ export function MapContainer() {
       .setLngLat(end)
       .addTo(map.current);
     markersRef.current.push(endMarker);
+
+    // NEW: fit map to the full route bounds with a smooth animation
+    const bounds = new mapboxgl.LngLatBounds();
+    // include all geometry coords for accurate fit
+    if (geometry.type === 'LineString') {
+      (geometry.coordinates as number[][]).forEach(coord => bounds.extend(coord as [number, number]));
+    } else if (geometry.type === 'MultiLineString') {
+      (geometry.coordinates as number[][][]).forEach(line => {
+        line.forEach(coord => bounds.extend(coord as [number, number]));
+      });
+    }
+    // ensure start & end are included (in case geometry missing them)
+    bounds.extend(start);
+    bounds.extend(end);
+
+    map.current.fitBounds(bounds, {
+      padding: 80,
+      duration: 1500,
+    });
   };
 
   const clearRoute = (clearSearchQuery = true) => {
@@ -847,6 +926,7 @@ export function MapContainer() {
     setRouteAlternatives([]);
     setExpandedSteps(new Set());
     setShowDirections(false);
+    setShowTimeSelector(false); // Hide time selector when clearing route
     
     // Clear all markers
     markersRef.current.forEach(marker => marker.remove());
@@ -905,98 +985,200 @@ export function MapContainer() {
     
     if (step.transitDetails) {
       const colors = getTTCLineColor(step.transitDetails.line.name);
+      const vehicleIcon = getTransitIcon(step.transitDetails.line.vehicle?.type || GoogleTransitMode.BUS);
       
       return (
-        <div key={index} className="mb-3">
-          <button
-            onClick={() => toggleStepExpansion(index)}
-            className="w-full text-left hover:bg-gray-800 rounded-lg p-3 transition-colors"
-          >
-            <div className="flex items-start space-x-3">
-              <div 
-                className="flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center"
-                style={{ backgroundColor: colors.bg, color: colors.text }}
-              >
-                {getTransitIcon(step.transitDetails.line.vehicle?.type || GoogleTransitMode.BUS)}
-              </div>
-              
-              <div className="flex-1">
-                <div className="flex items-center space-x-2">
-                  <span className="font-semibold text-white">
-                    {step.transitDetails.line.shortName || step.transitDetails.line.name}
-                  </span>
-                  <span className="text-gray-400 text-sm">
-                    towards {step.transitDetails.headsign}
-                  </span>
-                </div>
-                
-                <div className="text-sm text-gray-400 mt-1">
-                  <div className="flex items-center space-x-2">
-                    <Clock className="h-3 w-3" />
-                    <span>{step.transitDetails.departureTime} - {step.transitDetails.arrivalTime}</span>
-                  </div>
-                  <div className="flex items-center space-x-2 mt-1">
-                    <MapPin className="h-3 w-3" />
-                    <span>{step.transitDetails.numStops} stops • {step.duration?.text}</span>
-                  </div>
-                </div>
-                
-                <div className="flex items-center justify-end mt-2">
-                  {isExpanded ? <ChevronDown className="h-4 w-4 text-gray-400" /> : <ChevronRight className="h-4 w-4 text-gray-400" />}
-                </div>
-              </div>
-            </div>
-          </button>
+        <div key={index} className="relative">
+          {/* Connection line to previous step */}
+          {index > 0 && (
+            <div className="absolute left-6 -top-3 w-0.5 h-3 bg-gray-600"></div>
+          )}
           
-          {isExpanded && (
-            <div className="ml-11 mt-2 p-3 bg-gray-800/50 rounded-lg">
-              <div className="space-y-2 text-sm">
-                <div className="flex items-start space-x-2">
-                  <div className="w-2 h-2 bg-green-500 rounded-full mt-1.5"></div>
-                  <div>
-                    <div className="text-white font-medium">Board at {step.transitDetails.departureStop}</div>
-                    <div className="text-gray-400">{step.transitDetails.departureTime}</div>
+          <div className="bg-gray-800/30 rounded-xl border border-gray-700/50 overflow-hidden">
+            <button
+              onClick={() => toggleStepExpansion(index)}
+              className="w-full text-left hover:bg-gray-700/30 transition-colors p-4"
+            >
+              <div className="flex items-center space-x-4">
+                {/* Vehicle icon with line color */}
+                <div 
+                  className="flex-shrink-0 w-12 h-12 rounded-xl flex items-center justify-center shadow-lg"
+                  style={{ backgroundColor: colors.bg, color: colors.text }}
+                >
+                  {vehicleIcon}
+                </div>
+                
+                <div className="flex-1 min-w-0">
+                  {/* Line name and direction */}
+                  <div className="flex items-center space-x-2 mb-1">
+                    <span className="font-bold text-white text-base">
+                      {step.transitDetails.line.shortName || step.transitDetails.line.name}
+                    </span>
+                    <span className="text-gray-400 text-sm">→</span>
+                    <span className="text-gray-300 text-sm font-medium truncate">
+                      {step.transitDetails.headsign}
+                    </span>
                   </div>
-                </div>
-                
-                <div className="border-l-2 border-gray-600 ml-1 pl-6 py-2">
-                  <div className="text-gray-400">{step.transitDetails.numStops} stops</div>
-                </div>
-                
-                <div className="flex items-start space-x-2">
-                  <div className="w-2 h-2 bg-red-500 rounded-full mt-1.5"></div>
-                  <div>
-                    <div className="text-white font-medium">Exit at {step.transitDetails.arrivalStop}</div>
-                    <div className="text-gray-400">{step.transitDetails.arrivalTime}</div>
-                  </div>
-                </div>
-                
-                {step.transitDetails.line.agencies?.[0] && (
-                  <div className="mt-3 pt-3 border-t border-gray-700">
-                    <div className="text-gray-400 text-xs">
-                      Operated by {step.transitDetails.line.agencies[0].name}
+                  
+                  {/* Time and stops info */}
+                  <div className="flex items-center space-x-4 text-sm">
+                    <div className="flex items-center space-x-1.5">
+                      <Clock className="h-4 w-4 text-blue-400" />
+                      <span className="text-white font-medium">
+                        {step.transitDetails.departureTime}
+                      </span>
+                      <span className="text-gray-400">→</span>
+                      <span className="text-white font-medium">
+                        {step.transitDetails.arrivalTime}
+                      </span>
+                    </div>
+                    <div className="flex items-center space-x-1.5">
+                      <MapPin className="h-4 w-4 text-gray-400" />
+                      <span className="text-gray-300">
+                        {step.transitDetails.numStops} stops
+                      </span>
+                    </div>
+                    <div className="flex items-center space-x-1.5">
+                      <span className="text-gray-300 font-medium">
+                        {step.duration?.text}
+                      </span>
                     </div>
                   </div>
-                )}
+                </div>
+                
+                {/* Expand/collapse indicator */}
+                <div className="flex-shrink-0">
+                  {isExpanded ? 
+                    <ChevronDown className="h-5 w-5 text-gray-400" /> : 
+                    <ChevronRight className="h-5 w-5 text-gray-400" />
+                  }
+                </div>
               </div>
-            </div>
-          )}
+            </button>
+            
+            {/* Expanded details */}
+            {isExpanded && (
+              <div className="px-4 pb-4 border-t border-gray-700/50">
+                <div className="ml-16 space-y-4">
+                  {/* Journey timeline */}
+                  <div className="relative">
+                    {/* Departure */}
+                    <div className="flex items-start space-x-3 mb-4">
+                      <div className="flex-shrink-0 w-3 h-3 bg-green-500 rounded-full mt-2 shadow-lg"></div>
+                      <div className="flex-1">
+                        <div className="text-white font-semibold text-sm">
+                          Board at {step.transitDetails.departureStop}
+                        </div>
+                        <div className="text-gray-400 text-xs mt-0.5">
+                          Platform • {step.transitDetails.departureTime}
+                        </div>
+                      </div>
+                    </div>
+                    
+                    {/* Journey line */}
+                    <div className="absolute left-1.5 top-8 bottom-8 w-0.5 bg-gradient-to-b from-green-500 to-red-500"></div>
+                    
+                    {/* Journey info */}
+                    <div className="flex items-center space-x-3 mb-4 ml-6">
+                      <div className="flex-1 py-3 px-4 bg-gray-800/50 rounded-lg">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center space-x-2">
+                            <div 
+                              className="w-6 h-6 rounded-md flex items-center justify-center text-xs font-bold"
+                              style={{ backgroundColor: colors.bg, color: colors.text }}
+                            >
+                              {step.transitDetails.line.shortName?.substring(0, 2) || 
+                               step.transitDetails.line.name.substring(0, 2)}
+                            </div>
+                            <span className="text-gray-300 text-sm">
+                              {step.transitDetails.numStops} stops
+                            </span>
+                          </div>
+                          <div className="text-right">
+                            <div className="text-white text-sm font-medium">
+                              {step.duration?.text}
+                            </div>
+                            <div className="text-gray-400 text-xs">
+                              {step.distance?.text}
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                    
+                    {/* Arrival */}
+                    <div className="flex items-start space-x-3">
+                      <div className="flex-shrink-0 w-3 h-3 bg-red-500 rounded-full mt-2 shadow-lg"></div>
+                      <div className="flex-1">
+                        <div className="text-white font-semibold text-sm">
+                          Exit at {step.transitDetails.arrivalStop}
+                        </div>
+                        <div className="text-gray-400 text-xs mt-0.5">
+                          Platform • {step.transitDetails.arrivalTime}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                  
+                  {/* Additional transit info */}
+                  {step.transitDetails.line.agencies?.[0] && (
+                    <div className="mt-4 pt-3 border-t border-gray-700/50">
+                      <div className="flex items-center space-x-2 text-xs">
+                        <div className="w-2 h-2 bg-blue-400 rounded-full"></div>
+                        <span className="text-gray-400">
+                          Operated by {step.transitDetails.line.agencies[0].name}
+                        </span>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
         </div>
       );
     }
     
-    // Walking steps
+    // Walking/Transfer steps - redesigned to show connection
+    const isWalkingStep = step.travelMode === 'WALKING';
+    
     return (
-      <div key={index} className="flex items-start space-x-3 p-3 hover:bg-gray-800 rounded-lg transition-colors">
-        <div className="flex-shrink-0 w-8 h-8 bg-gray-700 rounded-full flex items-center justify-center">
-          <PersonStanding className="h-4 w-4 text-gray-300" />
+      <div key={index} className="relative">
+        {/* Connection line */}
+        {index > 0 && (
+          <div className="absolute left-6 -top-3 w-0.5 h-3 bg-gray-600"></div>
+        )}
+        
+        <div className="flex items-start space-x-4 p-4 bg-gray-800/20 rounded-xl border border-gray-700/30">
+          {/* Walking icon */}
+          <div className="flex-shrink-0 w-12 h-12 bg-gradient-to-br from-green-500 to-green-600 rounded-xl flex items-center justify-center shadow-lg">
+            <PersonStanding className="h-6 w-6 text-white" />
+          </div>
+          
+          <div className="flex-1 min-w-0">
+            {/* Instruction */}
+            <div className="text-white font-medium text-sm mb-1">
+              {step.instructions || 'Walk to next stop'}
+            </div>
+            
+            {/* Duration and distance */}
+            <div className="flex items-center space-x-4 text-xs">
+              <div className="flex items-center space-x-1.5">
+                <Clock className="h-3 w-3 text-gray-400" />
+                <span className="text-gray-300">{step.duration?.text || '2 min'}</span>
+              </div>
+              <div className="flex items-center space-x-1.5">
+                <Navigation className="h-3 w-3 text-gray-400" />
+                <span className="text-gray-300">{step.distance?.text || '150m'}</span>
+              </div>
+            </div>
+          </div>
         </div>
-        <div className="flex-1">
-          <p className="text-white text-sm">{step.instructions}</p>
-          <p className="text-gray-400 text-xs mt-1">
-            {step.distance?.text} • {step.duration?.text}
-          </p>
-        </div>
+        
+        {/* Connection line to next step */}
+        {index < routeSteps.length - 1 && (
+          <div className="absolute left-6 bottom-0 w-0.5 h-3 bg-gray-600"></div>
+        )}
       </div>
     );
   };
@@ -1095,43 +1277,227 @@ export function MapContainer() {
 
       {/* Transport Mode Selection */}
       <div className="absolute bottom-4 right-4 z-20">
-        <div className="bg-gray-900/95 backdrop-blur-sm rounded-xl shadow-xl border border-gray-700 p-2">
+        <div className="bg-gray-900/95 backdrop-blur-sm rounded-xl shadow-xl border border-gray-600/50 p-2">
           <div className="flex flex-col space-y-2">
             <Button
-              variant={selectedTransportMode === TransportMode.DRIVING ? "default" : "ghost"}
+              variant="ghost"
               size="icon"
               onClick={() => setSelectedTransportMode(TransportMode.DRIVING)}
-              className="w-10 h-10 rounded-lg"
+              className={`w-10 h-10 rounded-lg border border-gray-600/50 transition-all duration-200 ${
+                selectedTransportMode === TransportMode.DRIVING
+                  ? 'bg-blue-600 hover:bg-blue-700 text-white border-blue-500'
+                  : 'text-gray-300 hover:text-white hover:bg-gray-700 hover:border-gray-500'
+              }`}
             >
               <Car className="h-4 w-4" />
             </Button>
             <Button
-              variant={selectedTransportMode === TransportMode.WALKING ? "default" : "ghost"}
+              variant="ghost"
               size="icon"
               onClick={() => setSelectedTransportMode(TransportMode.WALKING)}
-              className="w-10 h-10 rounded-lg"
+              className={`w-10 h-10 rounded-lg border border-gray-600/50 transition-all duration-200 ${
+                selectedTransportMode === TransportMode.WALKING
+                  ? 'bg-blue-600 hover:bg-blue-700 text-white border-blue-500'
+                  : 'text-gray-300 hover:text-white hover:bg-gray-700 hover:border-gray-500'
+              }`}
             >
               <PersonStanding className="h-4 w-4" />
             </Button>
             <Button
-              variant={selectedTransportMode === TransportMode.CYCLING ? "default" : "ghost"}
+              variant="ghost"
               size="icon"
               onClick={() => setSelectedTransportMode(TransportMode.CYCLING)}
-              className="w-10 h-10 rounded-lg"
+              className={`w-10 h-10 rounded-lg border border-gray-600/50 transition-all duration-200 ${
+                selectedTransportMode === TransportMode.CYCLING
+                  ? 'bg-blue-600 hover:bg-blue-700 text-white border-blue-500'
+                  : 'text-gray-300 hover:text-white hover:bg-gray-700 hover:border-gray-500'
+              }`}
             >
               <Bike className="h-4 w-4" />
             </Button>
             <Button
-              variant={selectedTransportMode === TransportMode.TRANSIT ? "default" : "ghost"}
+              variant="ghost"
               size="icon"
               onClick={() => setSelectedTransportMode(TransportMode.TRANSIT)}
-              className="w-10 h-10 rounded-lg"
+              className={`w-10 h-10 rounded-lg border border-gray-600/50 transition-all duration-200 relative overflow-hidden ${
+                selectedTransportMode === TransportMode.TRANSIT
+                  ? 'bg-blue-600 hover:bg-blue-700 text-white border-blue-500'
+                  : 'text-gray-300 hover:text-white hover:bg-gray-700 hover:border-gray-500'
+              }`}
             >
-              <Train className="h-4 w-4" />
+              {selectedTransportMode === TransportMode.TRANSIT && (
+                <div className="absolute inset-0 bg-gradient-to-r from-blue-500/20 to-purple-500/20 animate-pulse" />
+              )}
+              <Train className="h-4 w-4 z-10" />
             </Button>
           </div>
         </div>
       </div>
+
+      {/* Transit Time Selector - show when transit mode is selected */}
+      {selectedTransportMode === TransportMode.TRANSIT && (
+        <div className="absolute bottom-4 right-20 z-20 transition-all duration-300 ease-out">
+          <div className="bg-gray-900/95 backdrop-blur-sm rounded-xl shadow-xl border border-gray-700 overflow-hidden transition-all duration-300">
+            {!showTimeSelector ? (
+              <Button
+                onClick={() => setShowTimeSelector(true)}
+                variant="ghost"
+                className="flex items-center space-x-2 px-4 py-3 text-white hover:bg-gray-700 relative overflow-hidden group border border-gray-600/50 hover:border-gray-500"
+              >
+                {transitTimeMode === 'leave_now' && (
+                  <div className="absolute inset-0 bg-gradient-to-r from-blue-500/30 to-purple-500/30 animate-pulse" />
+                )}
+                <CalendarClock className="h-4 w-4 z-10 text-blue-400" />
+                <span className="text-sm font-semibold z-10 text-gray-100">
+                  {transitTimeMode === 'leave_now' ? 'Leave now' :
+                   transitTimeMode === 'leave_at' ? `Leave at ${formatTime(transitTargetTime)}` :
+                   `Arrive by ${formatTime(transitTargetTime)}`}
+                </span>
+                <ChevronDown className="h-4 w-4 ml-2 z-10 transition-transform group-hover:translate-y-0.5 text-gray-300" />
+              </Button>
+            ) : (
+                             <div className="p-4 space-y-3 w-64">
+                 <div className="flex items-center justify-between mb-2">
+                   <h3 className="text-gray-100 font-semibold text-sm">Schedule Trip</h3>
+                   <Button
+                     onClick={() => setShowTimeSelector(false)}
+                     variant="ghost"
+                     size="icon"
+                     className="h-6 w-6 text-gray-300 hover:text-white hover:bg-gray-700"
+                   >
+                     <X className="h-3 w-3" />
+                   </Button>
+                 </div>
+                 
+                 {/* Time mode selection */}
+                 <div className="space-y-1">
+                   <Button
+                     variant={transitTimeMode === 'leave_now' ? "default" : "ghost"}
+                     onClick={() => {
+                       setTransitTimeMode('leave_now');
+                       if (currentRoute && userLocation && destination) {
+                         getRoute(userLocation, destination, TransportMode.TRANSIT);
+                       }
+                     }}
+                     className={`w-full justify-start text-sm h-9 ${
+                       transitTimeMode === 'leave_now' 
+                         ? 'bg-blue-600 hover:bg-blue-700 text-white' 
+                         : 'text-gray-200 hover:text-white hover:bg-gray-700'
+                     }`}
+                   >
+                     <Clock className="h-4 w-4 mr-2" />
+                     Leave now
+                   </Button>
+                   
+                   <Button
+                     variant={transitTimeMode === 'leave_at' ? "default" : "ghost"}
+                     onClick={() => setTransitTimeMode('leave_at')}
+                     className={`w-full justify-start text-sm h-9 ${
+                       transitTimeMode === 'leave_at' 
+                         ? 'bg-blue-600 hover:bg-blue-700 text-white' 
+                         : 'text-gray-200 hover:text-white hover:bg-gray-700'
+                     }`}
+                   >
+                     <Calendar className="h-4 w-4 mr-2" />
+                     Leave at
+                   </Button>
+                   
+                   <Button
+                     variant={transitTimeMode === 'arrive_by' ? "default" : "ghost"}
+                     onClick={() => setTransitTimeMode('arrive_by')}
+                     className={`w-full justify-start text-sm h-9 ${
+                       transitTimeMode === 'arrive_by' 
+                         ? 'bg-blue-600 hover:bg-blue-700 text-white' 
+                         : 'text-gray-200 hover:text-white hover:bg-gray-700'
+                     }`}
+                   >
+                     <MapPin className="h-4 w-4 mr-2" />
+                     Arrive by
+                   </Button>
+                 </div>
+                
+                {/* Time/Date picker for leave_at and arrive_by */}
+                {(transitTimeMode === 'leave_at' || transitTimeMode === 'arrive_by') && (
+                  <div className="space-y-2 pt-2 border-t border-gray-700">
+                                         {/* Quick time options for leave_at */}
+                     {transitTimeMode === 'leave_at' && (
+                       <div className="grid grid-cols-3 gap-1 mb-2">
+                         <Button
+                           variant="ghost"
+                           onClick={() => {
+                             const newTime = new Date();
+                             newTime.setMinutes(newTime.getMinutes() + 15);
+                             setTransitTargetTime(newTime);
+                           }}
+                           className="text-xs h-7 px-2 text-gray-200 hover:text-white hover:bg-gray-700 border border-gray-600/50"
+                         >
+                           +15 min
+                         </Button>
+                         <Button
+                           variant="ghost"
+                           onClick={() => {
+                             const newTime = new Date();
+                             newTime.setMinutes(newTime.getMinutes() + 30);
+                             setTransitTargetTime(newTime);
+                           }}
+                           className="text-xs h-7 px-2 text-gray-200 hover:text-white hover:bg-gray-700 border border-gray-600/50"
+                         >
+                           +30 min
+                         </Button>
+                         <Button
+                           variant="ghost"
+                           onClick={() => {
+                             const newTime = new Date();
+                             newTime.setHours(newTime.getHours() + 1);
+                             setTransitTargetTime(newTime);
+                           }}
+                           className="text-xs h-7 px-2 text-gray-200 hover:text-white hover:bg-gray-700 border border-gray-600/50"
+                         >
+                           +1 hour
+                         </Button>
+                       </div>
+                     )}
+                    
+                    <input
+                      type="time"
+                      value={transitTargetTime.toTimeString().slice(0, 5)}
+                      onChange={(e) => {
+                        const [hours, minutes] = e.target.value.split(':');
+                        const newTime = new Date(transitTargetTime);
+                        newTime.setHours(parseInt(hours), parseInt(minutes));
+                        setTransitTargetTime(newTime);
+                      }}
+                      className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-gray-100 text-sm focus:outline-none focus:border-blue-400 focus:bg-gray-600"
+                    />
+                    
+                    <input
+                      type="date"
+                      value={transitTargetTime.toISOString().slice(0, 10)}
+                      onChange={(e) => {
+                        const newTime = new Date(e.target.value + 'T' + transitTargetTime.toTimeString().slice(0, 8));
+                        setTransitTargetTime(newTime);
+                      }}
+                      className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-gray-100 text-sm focus:outline-none focus:border-blue-400 focus:bg-gray-600"
+                    />
+                    
+                    <Button
+                      onClick={() => {
+                        setShowTimeSelector(false);
+                        if (currentRoute && userLocation && destination) {
+                          getRoute(userLocation, destination, TransportMode.TRANSIT);
+                        }
+                      }}
+                      className="w-full bg-blue-600 hover:bg-blue-700 text-white text-sm h-9 font-semibold"
+                    >
+                      Update route
+                    </Button>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Route info component */}
       {currentRoute && (
@@ -1141,7 +1507,7 @@ export function MapContainer() {
             <div className="absolute inset-0 bg-black/30 z-30" onClick={() => setShowDirections(false)} />
           )}
           
-          <div className={`absolute bottom-4 left-1/2 transform -translate-x-1/2 ${showDirections ? 'w-96' : 'w-80'} z-40 bg-gray-900/95 backdrop-blur-sm rounded-xl shadow-xl border border-gray-700 transition-all duration-300 ${showDirections ? 'max-h-[70vh]' : 'max-h-32'} overflow-hidden`}>
+          <div className={`absolute bottom-4 left-1/2 transform -translate-x-1/2 ${showDirections ? 'w-[480px]' : 'w-80'} z-40 bg-gray-900/95 backdrop-blur-sm rounded-xl shadow-xl border border-gray-700 transition-all duration-300 ${showDirections ? 'max-h-[75vh]' : 'max-h-32'} overflow-hidden`}>
             {/* Header */}
             <div className="p-4 border-b border-gray-700">
               <div className="flex items-center justify-between">
@@ -1177,8 +1543,8 @@ export function MapContainer() {
                 </div>
               </div>
               
-              {/* Transit-specific info */}
-              {currentRoute.mode === TransportMode.TRANSIT && currentRoute.departureTime && currentRoute.arrivalTime && (
+              {/* Transit-specific info - only show when directions are expanded */}
+              {showDirections && currentRoute.mode === TransportMode.TRANSIT && currentRoute.departureTime && currentRoute.arrivalTime && (
                 <div className="mt-3 pt-3 border-t border-gray-700 space-y-2">
                   <div className="flex items-center justify-between text-sm">
                     <div className="flex items-center space-x-2">
@@ -1225,7 +1591,36 @@ export function MapContainer() {
                                 fare: route.fare,
                                 warnings: route.warnings,
                               });
-                              setRouteSteps(leg.steps);
+                              // Convert Google API format to our RouteStep format
+                              const convertedSteps = leg.steps.map((step: any) => ({
+                                distance: step.distance,
+                                duration: step.duration,
+                                instructions: step.html_instructions?.replace(/<[^>]*>/g, '') || 'Continue',
+                                travelMode: step.travel_mode,
+                                transitDetails: step.transit_details ? {
+                                  arrivalStop: step.transit_details.arrival_stop.name,
+                                  arrivalTime: step.transit_details.arrival_time.text,
+                                  departureStop: step.transit_details.departure_stop.name,
+                                  departureTime: step.transit_details.departure_time.text,
+                                  headsign: step.transit_details.headsign,
+                                  line: {
+                                    name: step.transit_details.line.name,
+                                    shortName: step.transit_details.line.short_name,
+                                    color: step.transit_details.line.color,
+                                    textColor: step.transit_details.line.text_color,
+                                    vehicle: step.transit_details.line.vehicle ? {
+                                      type: step.transit_details.line.vehicle.type,
+                                      name: step.transit_details.line.vehicle.name,
+                                      icon: step.transit_details.line.vehicle.icon,
+                                    } : undefined,
+                                    agencies: step.transit_details.line.agencies,
+                                  },
+                                  numStops: step.transit_details.num_stops,
+                                } : undefined,
+                                polyline: step.polyline,
+                                maneuver: step.maneuver,
+                              }));
+                              setRouteSteps(convertedSteps);
                               if (userLocation && destination) {
                                 addGoogleRouteToMap(route, userLocation, destination, TransportMode.TRANSIT);
                               }
@@ -1241,8 +1636,8 @@ export function MapContainer() {
                 </div>
               )}
               
-              {/* Warnings */}
-              {currentRoute.warnings && currentRoute.warnings.length > 0 && (
+              {/* Warnings - only show when directions are expanded */}
+              {showDirections && currentRoute.warnings && currentRoute.warnings.length > 0 && (
                 <div className="mt-2 p-2 bg-yellow-900/20 border border-yellow-700/50 rounded-lg">
                   <div className="flex items-start space-x-2">
                     <AlertTriangle className="h-4 w-4 text-yellow-500 flex-shrink-0 mt-0.5" />
@@ -1256,9 +1651,9 @@ export function MapContainer() {
             
             {/* Expandable directions */}
             {showDirections && (
-              <div className="p-4 overflow-y-auto max-h-96 scrollbar-thin scrollbar-track-gray-800 scrollbar-thumb-gray-600">
+              <div className="p-6 overflow-y-auto max-h-[50vh] scrollbar-thin scrollbar-track-gray-800 scrollbar-thumb-gray-600">
                 {currentRoute.mode === TransportMode.TRANSIT ? (
-                  <div className="space-y-3">
+                  <div className="space-y-4">
                     {routeSteps.map((step, index) => renderTransitStep(step, index))}
                   </div>
                 ) : (

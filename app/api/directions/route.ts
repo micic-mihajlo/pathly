@@ -41,6 +41,11 @@ export async function POST(request: NextRequest) {
         params.append('departure_time', departureTime.toString());
       }
       
+      if (transitOptions.arrivalTime) {
+        const arrivalTime = Math.floor(new Date(transitOptions.arrivalTime).getTime() / 1000);
+        params.append('arrival_time', arrivalTime.toString());
+      }
+      
       if (transitOptions.modes && transitOptions.modes.length > 0) {
         params.append('transit_mode', transitOptions.modes.join('|'));
       }
