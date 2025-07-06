@@ -17,7 +17,7 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { RouteInfo, RouteStep, TransportMode, GoogleRoute } from "@/utils/types";
-import { formatDuration, formatDistance, formatTime, getTransitIcon, getTTCLineColor } from "@/utils/transit";
+import { formatDuration, formatDistance, formatTime, getTransitIcon, getTTCLineColor, GoogleTransitMode } from "@/utils/transit";
 
 interface DirectionsPanelProps {
   currentRoute: RouteInfo | null;
@@ -51,7 +51,7 @@ export function DirectionsPanel({
     
     if (step.transitDetails) {
       const colors = getTTCLineColor(step.transitDetails.line.name);
-      const vehicleIcon = getTransitIcon(step.transitDetails.line.vehicle?.type as any);
+      const vehicleIcon = getTransitIcon((step.transitDetails.line.vehicle?.type || 'BUS') as GoogleTransitMode);
       
       return (
         <div key={index} className="relative">

@@ -28,28 +28,37 @@ export function getTransitIcon(type: GoogleTransitMode): React.ReactElement {
 
 // Get TTC line color (for known lines)
 export function getTTCLineColor(lineName: string): { bg: string; text: string } {
+  if (!lineName) {
+    return { bg: '#165788', text: '#FFFFFF' };
+  }
+  
   const name = lineName.toUpperCase();
   
-  // Subway lines
-  if (name.includes('LINE 1') || name.includes('YONGE')) {
+  // Subway lines - more flexible matching
+  if (name.includes('LINE 1') || name.includes('YONGE') || name.includes('UNIVERSITY')) {
     return { bg: '#FCBA12', text: '#000000' };
   }
-  if (name.includes('LINE 2') || name.includes('BLOOR')) {
+  if (name.includes('LINE 2') || name.includes('BLOOR') || name.includes('DANFORTH')) {
     return { bg: '#00923F', text: '#FFFFFF' };
   }
-  if (name.includes('LINE 3') || name.includes('SCARBOROUGH')) {
+  if (name.includes('LINE 3') || name.includes('SCARBOROUGH') || name.includes('RT')) {
     return { bg: '#0082C9', text: '#FFFFFF' };
   }
   if (name.includes('LINE 4') || name.includes('SHEPPARD')) {
     return { bg: '#A3238E', text: '#FFFFFF' };
   }
   
-  // Streetcars (red)
+  // Streetcars (red) - match line numbers
   if (name.match(/^\d{3}[A-Z]?$/)) { // e.g., "501", "509A"
     return { bg: '#E31937', text: '#FFFFFF' };
   }
   
-  // Default bus color
+  // Bus routes (numeric) - use TTC red
+  if (name.match(/^\d{1,3}[A-Z]?$/)) { // e.g., "7", "25B", "196"
+    return { bg: '#E31937', text: '#FFFFFF' };
+  }
+  
+  // Default bus color for unknown
   return { bg: '#165788', text: '#FFFFFF' };
 }
 
@@ -83,7 +92,7 @@ export function formatDistance(meters: number) {
 }
 
 // Get route segment color based on transit details
-export function getRouteSegmentColor(step: Record<string, any>, isTransit: boolean): string {
+export function getRouteSegmentColor(step: { transit_details?: { line?: { color?: string; name?: string; short_name?: string; vehicle?: { type?: string } } } }, isTransit: boolean): string {
   if (!isTransit) {
     // Walking segments - use green to differentiate from driving
     return '#22C55E'; // Green-500

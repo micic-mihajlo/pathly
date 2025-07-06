@@ -198,22 +198,26 @@ export function TransportToggle({
                  
                   <input
                     type="time"
-                    value={transitTargetTime.toTimeString().slice(0, 5)}
+                    value={isNaN(transitTargetTime.getTime()) ? '09:00' : transitTargetTime.toTimeString().slice(0, 5)}
                     onChange={(e) => {
                       const [hours, minutes] = e.target.value.split(':');
-                      const newTime = new Date(transitTargetTime);
-                      newTime.setHours(parseInt(hours), parseInt(minutes));
-                      onTargetTime(newTime);
+                      if (hours && minutes && !isNaN(parseInt(hours)) && !isNaN(parseInt(minutes))) {
+                        const newTime = new Date(transitTargetTime);
+                        newTime.setHours(parseInt(hours), parseInt(minutes));
+                        onTargetTime(newTime);
+                      }
                     }}
                     className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-gray-100 text-sm focus:outline-none focus:border-blue-400 focus:bg-gray-600"
                   />
                   
                   <input
                     type="date"
-                    value={transitTargetTime.toISOString().slice(0, 10)}
+                    value={isNaN(transitTargetTime.getTime()) ? new Date().toISOString().slice(0, 10) : transitTargetTime.toISOString().slice(0, 10)}
                     onChange={(e) => {
                       const newTime = new Date(e.target.value + 'T' + transitTargetTime.toTimeString().slice(0, 8));
-                      onTargetTime(newTime);
+                      if (!isNaN(newTime.getTime())) {
+                        onTargetTime(newTime);
+                      }
                     }}
                     className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-gray-100 text-sm focus:outline-none focus:border-blue-400 focus:bg-gray-600"
                   />

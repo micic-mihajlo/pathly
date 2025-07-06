@@ -109,7 +109,22 @@ export async function POST(request: NextRequest) {
     }
 
     // Transform the response to our format
-    const places = data.results?.map((place: any) => ({
+    const places = data.results?.map((place: {
+      place_id: string;
+      name: string;
+      vicinity?: string;
+      formatted_address?: string;
+      geometry: { location: { lat: number; lng: number } };
+      rating?: number;
+      user_ratings_total?: number;
+      price_level?: number;
+      types?: string[];
+      opening_hours?: { open_now?: boolean };
+      photos?: { photo_reference: string }[];
+      icon?: string;
+      icon_background_color?: string;
+      icon_mask_base_uri?: string;
+    }) => ({
       id: place.place_id,
       name: place.name,
       address: place.vicinity || place.formatted_address,
